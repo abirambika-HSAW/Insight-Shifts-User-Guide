@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Player</title>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FIREBASE MODULE IMPORTS -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Expose Firebase functions globally for use in the <script type="text/babel"> block
+        window.firebase = {
+            initializeApp,
+            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, doc, setDoc, onSnapshot, setLogLevel
+        };
+        setLogLevel('debug');
+    </script>
+    
+    <style>
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { 
+            background-color: #f8fafc; 
+            color: #1e293b; 
+            margin: 0; 
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+        
+        // Destructure Firebase functions from the global window object (bridged from the module script)
+        const {
+            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, doc, setDoc, onSnapshot
+        } = window.firebase || {};
+
+
+        // ====================================================================================
+        // 🔥🔥🔥 USER-PROVIDED FIREBASE CONFIGURATION (Used as fallback) 🔥🔥🔥
+        // ====================================================================================
+        const defaultUserConfig = {
+            apiKey: "AIzaSyA-BEfJ4uIWaD0Z6FQHGgh1hKn5g0sEnJI",
+            authDomain: "insight-shifts-user-guide.firebaseapp.com",
+            projectId: "insight-shifts-user-guide",
+            storageBucket: "insight-shifts-user-guide.firebasestorage.app",
+            messagingSenderId: "339523582968",
+            appId: "1:339523582968:web:b2ed93970759e9a74ff40d",
+            measurementId: "G-PQPPJEGFMH" 
+        };
+
+        // 1. Get configuration string from global Canvas variable (__firebase_config) or fallback to user default.
+        const configString = typeof __firebase_config !== 'undefined' 
+            ? __firebase_config 
+            : JSON.stringify(defaultUserConfig);
+
+        const firebaseConfig = JSON.parse(configString);
+
+        // 2. Get App ID (used for artifact pathing) from global Canvas variable (__app_id) or fallback.
+        const appId = typeof __app_id !== 'undefined' 
+            ? __app_id 
+            : firebaseConfig.projectId; 
+
+        // 3. Get Auth Token from global Canvas variable (__initial_auth_token) or null.
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' 
+            ? __initial_auth_token 
+            : null; 
+            
+        const projectId = firebaseConfig.projectId; // Keeping this for reference/consistency
+        // ====================================================================================
+
+
+        // --- ICONS --- 
+        const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
+        const IconMenu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
+        const IconDownload = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
+        const IconUser = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+
+        // --- COURSE CONTENT (Unchanged) ---
+        const courseData = {
+            title: "Using Your Insight Shifts™ Cards Deck: A Practical Guide",
+            author: "Course Instructor",
+            lessons: [
+                { id: 1, title: "Introduction – Why Listening to the System Matters", duration: "2:15", type: "video", videoId: "M7lc1UVf-VE", description: "This video introduces the purpose of the Insight Shifts™ deck and why listening to the system is essential in complex environments. It explains how most people make sense of situations through familiar patterns, while systems continuously offer subtle signals that often go unnoticed. The deck provides a simple way to pause, tune in, and surface emerging insights so individuals and teams can navigate complexity with greater ease, clarity, and intention." },
+                { id: 2, title: "Listening as a Way to Expand Awareness & Wisdom", duration: "10:30", type: "video", videoId: "tgbNymZ7vqY", description: "This video highlights listening as a skill that goes beyond hearing words. It explores how listening to oneself, others, and the surrounding system deepens wisdom and broadens awareness. Viewers learn how the deck encourages slower, more reflective engagement — enabling them to notice emotions, patterns, and what is not being said. The focus is on expanding perceptual range and accessing the deeper layers where new insights emerge." },
+                { id: 3, title: "Getting to Know the Cards – How the Card Works?", duration: "15:45", type: "video", videoId: "M7lc1UVf-VE", description: "This video explains the structure of the deck: 108 cards divided into three sets — Seeing, Sensing, and Symbol — with 36 cards each. • Seeing Cards – prompt questions that highlight patterns, assumptions, and perspectives. • Symbol Cards – images designed to trigger intuitive associations and alternative interpretations. • Sensing Cards – minimal symbols to help you tune into subtle, emerging signals in the system. Users are guided to draw one card from each set and notice what arises initially, then pause and sense again. This two-layer noticing often surfaces deeper insight and creates space for new understanding." },
+                { id: 4, title: "Using the Cards for Individuals or Self", duration: "8:00", type: "video", videoId: "tgbNymZ7vqY", description: "For Self-Reflection: Individuals use the deck by drawing one card from each set, holding a personal intention or question in mind. The three cards work together to open cognitive, intuitive, and metaphorical dimensions of insight. Users interpret the cards themselves, noticing thoughts, feelings, sensations, or shifts in perspective. The practice helps individuals surface new meaning, understand what is emerging, and explore possibilities with greater inner clarity.\n\nFor One-to-One Coaching: Coaches invite clients to draw clients to draw one card from each set to explore their topic from multiple angles. The cards act as neutral prompts that help clients move beyond familiar narratives and tap into deeper or emergent awareness. The coach supports the process through spacious listening and exploratory questioning, allowing the client to discover shifts, patterns, and new perspectives that can inform meaningful action." },
+                { id: 5, title: "Using the Cards with Pairs, Groups & Teams", duration: "12:50", type: "video", videoId: "M7lc1UVf-VE", description: "In group or team settings, participants draw one card from each set individually or collectively, depending on the intention of the session. This process encourages divergent thinking as each person surfaces different interpretations, insights, and perspectives based on their three-card combination. The group then moves into convergent thinking, exploring shared themes, patterns, tensions, or emerging ideas that arise from the collective insights. This structured flow supports richer dialogue, builds understanding, and helps teams discover previously unseen possibilities." },
+                { id: 6, title: "Listening to the System", duration: "9:15", type: "video", videoId: "tgbNymZ7vqY", description: "This video demonstrates how the deck can be used to sense the broader system — patterns, relationships, and dynamics that exist beyond any one individual. By noticing recurring themes, tensions, or subtle shifts across multiple card draws (individual or group), users begin to perceive what the system is trying to signal. This practice helps anticipate movement, uncover emerging needs, and understand the bigger picture without jumping prematurely into solutions." },
+                { id: 7, title: "Deepening Knowing & Sensing the Emerging Future", duration: "18:40", type: "video", videoId: "M7lc1UVf-VE", description: "This video explores how repeated use of the deck strengthens intuitive awareness and embodied knowing. As individuals or teams work with the cards over time, they begin to sense patterns before they become visible, notice early signs of change, and feel more connected to what is emerging. The deck becomes a practice for accessing deeper wisdom, sensing readiness for movement, and engaging with the unfolding future more intentionally." },
+                { id: 8, title: "Moving From Insights to Actions", duration: "6:20", type: "video", videoId: "tgbNymZ7vqY", description: "This video focuses on translating insight into meaningful, grounded action. After working with the cards, users identify one small step that aligns with what they have noticed — a shift in behaviour, a conversation, or a small experiment. The emphasis is on actionable micro-movements that build momentum. Using the deck regularly helps connect awareness with tangible next steps, supporting continuous learning and thoughtful responsiveness as systems evolve." },
+                { id: 9, title: "PDF Guidebook", type: "resource", description: "Download the complete companion guide and quick-reference sheets for your Insight Shift™ Cards." }
+            ]
+        };
+
+
+        function App() {
+            // --- FIREBASE STATE AND INITIALIZATION ---
+            const [db, setDb] = useState(null);
+            const [userId, setUserId] = useState(null);
+            const [isAuthReady, setIsAuthReady] = useState(false);
+            const [loadingMessage, setLoadingMessage] = useState("Connecting to Firebase...");
+
+            
+            // Initialize Firebase services and Authentication
+            useEffect(() => {
+                
+                let unsubscribeAuth = () => {};
+                let authService;
+
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    const firestore = getFirestore(app);
+                    authService = getAuth(app);
+
+                    setDb(firestore);
+
+                    // 1. Auth State Listener
+                    unsubscribeAuth = onAuthStateChanged(authService, (user) => {
+                        if (user) {
+                            setUserId(user.uid);
+                            setLoadingMessage(`Session secured (ID: ${user.uid.substring(0, 8)}...). Loading course progress...`);
+                        } else {
+                            // If user logs out or session expires, fallback to anonymous sign-in
+                            setUserId(null); 
+                            setLoadingMessage("Waiting for sign-in...");
+                        }
+                        setIsAuthReady(true); 
+                    });
+                    
+                    // 2. Initial Sign-in Attempt
+                    const authenticateUser = async () => {
+                        try {
+                            if (initialAuthToken) {
+                                // **PRIORITY:** Use the Canvas-provided custom token for secure sign-in (Bypasses anonymous restriction)
+                                await signInWithCustomToken(authService, initialAuthToken);
+                                console.log("Signed in with custom token.");
+                            } else {
+                                // Fallback: Use Anonymous sign-in (Requires Anonymous provider to be enabled in Firebase console)
+                                await signInAnonymously(authService);
+                                console.log("Signed in anonymously.");
+                            }
+                            setLoadingMessage("Authentication successful. Loading data...");
+                        } catch (error) {
+                            console.error("Authentication failed:", error);
+                            // Set ready state even on failure to allow non-authenticated view
+                            setLoadingMessage("Authentication failed. Progress saving disabled. (Error: " + error.code + ")");
+                            setIsAuthReady(true);
+                        }
+                    };
+
+                    authenticateUser();
+
+                    return () => unsubscribeAuth();
+
+                } catch (error) {
+                    console.error("Firebase initialization failed:", error);
+                    setLoadingMessage("Error during Firebase setup. Check console for details.");
+                    setIsAuthReady(true);
+                }
+            }, [initializeApp, initialAuthToken, JSON.stringify(firebaseConfig)]); 
+
+            // --- COURSE PROGRESS STATE & FIRESTORE SYNC ---
+            const [currentLesson, setCurrentLesson] = useState(courseData.lessons[0]);
+            const [completed, setCompleted] = useState([]); 
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+            
+            const userDisplayId = userId || 'N/A (Authenticating)';
+
+            // 3. Sync progress from Firestore
+            useEffect(() => {
+                let unsubscribeSnapshot = () => {};
+
+                if (db && userId && isAuthReady) {
+                    // Document path: /artifacts/{appId}/users/{userId}/course_data/progress_status
+                    const progressDocRef = doc(db, 
+                        `artifacts/${appId}/users/${userId}/course_data`, 
+                        'progress_status'
+                    );
+                    
+                    setLoadingMessage("Loading saved progress...");
+
+                    unsubscribeSnapshot = onSnapshot(progressDocRef, (docSnap) => {
+                        if (docSnap.exists() && docSnap.data().completedLessonIds) {
+                            setCompleted(docSnap.data().completedLessonIds);
+                        } else {
+                            setCompleted([]); 
+                        }
+                        setLoadingMessage("Course loaded.");
+                    }, (error) => {
+                        console.error("Error fetching progress from Firestore:", error);
+                        setCompleted([]); 
+                        setLoadingMessage("Error loading course progress. (Check Firestore Security Rules)."); 
+                    });
+                } else if (isAuthReady && !userId) {
+                    setCompleted([]);
+                    setLoadingMessage("Not signed in. Progress will not be saved.");
+                }
+                
+                return () => unsubscribeSnapshot(); 
+            }, [db, userId, isAuthReady, appId]); 
+
+            // 4. Update Firestore when progress changes
+            const updateProgressInFirestore = useCallback(async (newCompletedIds) => {
+                if (!db || !userId) {
+                    console.warn("Attempted to update progress before DB/User was ready. Data not saved.");
+                    return;
+                }
+
+                try {
+                    const progressDocRef = doc(db, 
+                        `artifacts/${appId}/users/${userId}/course_data`, 
+                        'progress_status'
+                    );
+                    
+                    await setDoc(progressDocRef, {
+                        completedLessonIds: newCompletedIds,
+                        lastUpdated: new Date().toISOString()
+                    }, { merge: true });
+                } catch (error) {
+                    console.error("Error writing progress to Firestore:", error);
+                }
+            }, [db, userId, appId]);
+
+            // Handle Responsive Layout
+            useEffect(() => {
+                const handleResize = () => {
+                    const mobile = window.innerWidth < 768;
+                    setIsMobile(mobile);
+                    if (mobile) setSidebarOpen(false);
+                    else setSidebarOpen(true);
+                };
+                window.addEventListener('resize', handleResize);
+                handleResize(); 
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
+            // Toggle logic updated to use Firestore
+            const toggleComplete = (id) => {
+                const newCompleted = completed.includes(id)
+                    ? completed.filter(item => item !== id)
+                    : [...completed, id];
+                
+                setCompleted(newCompleted);
+                updateProgressInFirestore(newCompleted);
+            };
+
+            const handleLessonSelect = (lesson) => {
+                setCurrentLesson(lesson);
+                if (isMobile) setSidebarOpen(false);
+            };
+
+            const calculateProgress = () => {
+                return Math.round((completed.length / courseData.lessons.length) * 100);
+            };
+            
+            // Show a simple loading screen while connecting to Firebase
+            if (!isAuthReady) {
+                return (
+                    <div className="flex flex-col h-screen items-center justify-center bg-slate-50 text-slate-800 font-sans">
+                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-teal-500 border-slate-200"></div>
+                        <p className="mt-4 text-slate-600 font-medium text-center max-w-sm px-4">{loadingMessage}</p>
+                    </div>
+                );
+            }
+
+            // --- RENDER FUNCTION (Body of the LMS) ---
+            return (
+                <div className="flex flex-col h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
+                    
+                    {/* Header */}
+                    <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 justify-between shrink-0 z-20 shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => setSidebarOpen(!sidebarOpen)}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+                            >
+                                <IconMenu />
+                            </button>
+                            <img 
+                                src="https://humansystemsatwork.ca/wp-content/uploads/Human-Systems-at-work-New-Logo-Cropped.png"
+                                alt="Human Systems at Work Logo"
+                                className="h-8 object-contain hidden sm:block"
+                                onError={(e) => { e.target.onerror = null; e.target.src = "https://placehold.co/100x32/edf2f7/4a5568?text=Logo"; }}
+                            />
+                            <h1 className="font-bold text-lg tracking-tight truncate max-w-[200px] sm:max-w-md text-slate-800">
+                                {courseData.title}
+                            </h1>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            
+                            {/* Session Info (User ID) */}
+                            <div className="flex items-center gap-2 border border-slate-200 rounded-lg p-2 bg-slate-50 text-xs font-medium text-slate-600 max-w-sm">
+                                <IconUser />
+                                <span className="pr-1 overflow-x-auto whitespace-nowrap" title={userId}>
+                                    Session ID: <span className="text-slate-800 font-semibold">{userDisplayId}</span>
+                                </span>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="hidden sm:flex flex-col items-end">
+                                <span className="text-xs text-slate-400 uppercase font-semibold tracking-wider">Progress</span>
+                                <div className="w-32 h-2 bg-slate-200 rounded-full mt-1 overflow-hidden relative">
+                                    <div 
+                                        className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                                        style={{ width: `${calculateProgress()}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                            
+                            <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center font-bold text-sm text-white shadow-md">
+                                {courseData.author.charAt(0)}
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Layout (Sidebar and Content) */}
+                    <div className="flex flex-1 overflow-hidden relative">
+                        
+                        {/* Sidebar */}
+                        <aside 
+                            className={`
+                                absolute md:relative z-10 h-full bg-white border-r border-slate-200 transition-all duration-300 ease-in-out shadow-sm
+                                ${sidebarOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full md:w-0 md:-translate-x-0'}
+                            `}
+                        >
+                            <div className="p-4 border-b border-slate-100">
+                                <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Course Content</h2>
+                            </div>
+                            <div className="overflow-y-auto h-[calc(100%-50px)] custom-scroll pb-20">
+                                {courseData.lessons.map((lesson, index) => {
+                                    const isActive = currentLesson.id === lesson.id;
+                                    const isCompleted = completed.includes(lesson.id);
+
+                                    return (
+                                        <div 
+                                            key={lesson.id}
+                                            onClick={() => handleLessonSelect(lesson)}
+                                            className={`
+                                                group flex items-start gap-3 p-4 cursor-pointer border-l-4 transition-all
+                                                ${isActive 
+                                                    ? 'bg-teal-100 border-teal-600' 
+                                                    : 'border-transparent hover:bg-slate-100 hover:border-slate-300'
+                                                }
+                                            `}
+                                        >
+                                            <div className="pt-1">
+                                                {isCompleted ? (
+                                                    <div className="text-teal-600"><IconCheck /></div>
+                                                ) : (
+                                                    <div className={`
+                                                        w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-semibold
+                                                        ${isActive ? 'border-teal-600 text-teal-700 bg-white' : 'border-slate-400 text-slate-500'}
+                                                    `}>
+                                                        {index + 1}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3 className={`text-sm font-medium mb-1 ${isActive ? 'text-teal-900' : 'text-slate-700'}`}>
+                                                    {lesson.title}
+                                                </h3>
+                                                <div className={`flex items-center gap-2 text-xs ${isActive ? 'text-teal-700' : 'text-slate-500'}`}>
+                                                    {lesson.type === 'video' ? lesson.duration : 'Resource'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </aside>
+
+                        {/* Video Player & Details */}
+                        <main className="flex-1 overflow-y-auto bg-slate-50 p-4 md:p-8 w-full">
+                            <div className="max-w-4xl mx-auto">
+                                
+                                <div className="mb-4 text-sm text-slate-400 flex items-center gap-2">
+                                    <span>Course</span>
+                                    <span>/</span>
+                                    <span className="text-teal-600 font-medium">{currentLesson.title}</span>
+                                </div>
+
+                                {/* Video Area */}
+                                <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-xl mb-8 ring-1 ring-slate-200">
+                                    {currentLesson.type === 'video' ? (
+                                        <iframe 
+                                            className="w-full h-full"
+                                            src={`https://www.youtube.com/embed/${currentLesson.videoId}?rel=0&modestbranding=1`} 
+                                            title={currentLesson.title}
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowFullScreen
+                                        ></iframe>
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-center p-6">
+                                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 text-teal-600 shadow-sm border border-slate-200">
+                                                <IconDownload />
+                                            </div>
+                                            <h3 className="text-xl font-bold mb-2 text-slate-800">Downloadable Content</h3>
+                                            <p className="text-slate-500 mb-6 max-w-md">
+                                                {currentLesson.description}
+                                            </p>
+                                            <button className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 shadow-md shadow-teal-300/50">
+                                                <IconDownload size={18} /> Download
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Lesson Info & Buttons */}
+                                <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 pb-12">
+                                    <div className="flex-1">
+                                        <h2 className="text-2xl font-bold mb-3 text-slate-800">{currentLesson.title}</h2>
+                                        <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+                                            {currentLesson.description}
+                                        </p>
+                                    </div>
+                                    
+                                    <div className="shrink-0">
+                                        {/* Mark as Complete Button */}
+                                        <button 
+                                            onClick={() => toggleComplete(currentLesson.id)}
+                                            className={`
+                                                w-full md:w-auto px-6 py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all shadow-md
+                                                ${completed.includes(currentLesson.id)
+                                                    ? 'bg-teal-500 text-white hover:bg-teal-600 shadow-teal-300/50'
+                                                    : 'bg-white text-teal-700 hover:bg-slate-50 border-2 border-teal-500 shadow-slate-300/50'
+                                                }
+                                            `}
+                                        >
+                                            {completed.includes(currentLesson.id) ? (
+                                                <>
+                                                    <IconCheck /> Completed
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Mark as Complete
+                                                </>
+                                            )}
+                                        </button>
+                                        
+                                        <div className="flex gap-3 mt-4">
+                                            {/* Previous Button */}
+                                            <button 
+                                                disabled={currentLesson.id === courseData.lessons[0].id}
+                                                onClick={() => {
+                                                    const currentIndex = courseData.lessons.findIndex(l => l.id === currentLesson.id);
+                                                    if(currentIndex > 0) handleLessonSelect(courseData.lessons[currentIndex - 1]);
+                                                }}
+                                                className="flex-1 px-4 py-2 bg-white hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium rounded-lg border border-slate-300 text-slate-700 transition-colors shadow-sm"
+                                            >
+                                                Previous
+                                            </button>
+                                            {/* Next Button */}
+                                            <button 
+                                                disabled={currentLesson.id === courseData.lessons[courseData.lessons.length - 1].id}
+                                                onClick={() => {
+                                                    const currentIndex = courseData.lessons.findIndex(l => l.id === currentLesson.id);
+                                                    if(currentIndex < courseData.lessons.length - 1) handleLessonSelect(courseData.lessons[currentIndex + 1]);
+                                                }}
+                                                className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium rounded-lg transition-colors text-white shadow-sm shadow-teal-200"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // Handle Responsive Layout
+        window.addEventListener('resize', () => {
+            // Re-render is handled inside the component's useEffect, but this ensures initial load responsiveness if needed.
+        });
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
