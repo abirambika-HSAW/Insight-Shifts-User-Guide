@@ -89,13 +89,15 @@
         // ====================================================================================
 
 
-        // --- ICONS --- 
+        // --- ICONS (FIXED IconDownload by removing extra polyline tag) --- 
         const IconCheck = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>;
         const IconMenu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>;
         const IconDownload = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>;
         const IconUser = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>;
+        const IconAlertTriangle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
 
-        // --- COURSE CONTENT (Unchanged) ---
+
+        // --- COURSE CONTENT (Updated with Resource URLs) ---
         const courseData = {
             title: "Insight Shifts™ Cards Deck: A Practical User Guide",
             author: "Course Instructor",
@@ -108,7 +110,15 @@
                 { id: 6, title: "Listening to the System", duration: "1:40", type: "video", videoId: "dH2NPYz-kTs", description: "This video demonstrates how the deck can be used to sense the broader system — patterns, relationships, and dynamics that exist beyond any one individual. By noticing recurring themes, tensions, or subtle shifts across multiple card draws (individual or group), users begin to perceive what the system is trying to signal. This practice helps anticipate movement, uncover emerging needs, and understand the bigger picture without jumping prematurely into solutions." },
                 { id: 7, title: "Deepening Knowing & Sensing the Emerging Future", duration: "2:06", type: "video", videoId: "9-gZkVfrxk8", description: "This video explores how repeated use of the deck strengthens intuitive awareness and embodied knowing. As individuals or teams work with the cards over time, they begin to sense patterns before they become visible, notice early signs of change, and feel more connected to what is emerging. The deck becomes a practice for accessing deeper wisdom, sensing readiness for movement, and engaging with the unfolding future more intentionally." },
                 { id: 8, title: "Moving From Insights to Actions", duration: "2:15", type: "video", videoId: "ah9VkkbZBPk", description: "This video focuses on translating insight into meaningful, grounded action. After working with the cards, users identify one small step that aligns with what they have noticed — a shift in behaviour, a conversation, or a small experiment. The emphasis is on actionable micro-movements that build momentum. Using the deck regularly helps connect awareness with tangible next steps, supporting continuous learning and thoughtful responsiveness as systems evolve." },
-                { id: 9, title: "PDF Guidebook", type: "resource", description: "Download the complete companion guide for your Insight Shift™ Cards." }
+                // RESOURCE LESSON (ID 9) - Added specific resource data for dynamic linking
+                { 
+                    id: 9, 
+                    title: "PDF Guidebook", 
+                    type: "resource", 
+                    description: "Download the complete companion guide for your Insight Shift™ Cards.",
+                    downloadUrl: "https://raw.githubusercontent.com/abirambika-HSAW/Insight-Shifts-User-Guide/main/Insight_Shifts_Guide.pdf", 
+                    fileName: "Insight_Shifts_Guidebook.pdf"
+                }
             ]
         };
 
@@ -128,6 +138,13 @@
                 let authService;
 
                 try {
+                    // Check if Firebase functions are available
+                    if (!initializeApp || !getAuth || !getFirestore) {
+                        setLoadingMessage("Firebase scripts failed to load. Please check network connection.");
+                        setIsAuthReady(true);
+                        return;
+                    }
+
                     const app = initializeApp(firebaseConfig);
                     const firestore = getFirestore(app);
                     authService = getAuth(app);
@@ -177,10 +194,13 @@
                     setLoadingMessage("Error during Firebase setup. Check console for details.");
                     setIsAuthReady(true);
                 }
-            }, [initializeApp, initialAuthToken, JSON.stringify(firebaseConfig)]); 
+            }, [initialAuthToken, JSON.stringify(firebaseConfig)]); 
 
             // --- COURSE PROGRESS STATE & FIRESTORE SYNC ---
-            const [currentLesson, setCurrentLesson] = useState(courseData.lessons[0]);
+            // Set initial lesson to the first one, or the one corresponding to ID 9 if it exists, to show resource immediately.
+            const [currentLesson, setCurrentLesson] = useState(
+                courseData.lessons.find(l => l.id === 9) || courseData.lessons[0]
+            );
             const [completed, setCompleted] = useState([]); 
             const [sidebarOpen, setSidebarOpen] = useState(true);
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -344,6 +364,14 @@
                                 ${sidebarOpen ? 'w-80 translate-x-0' : 'w-80 -translate-x-full md:w-0 md:-translate-x-0'}
                             `}
                         >
+                            {/* Mobile overlay for when sidebar is open */}
+                            {isMobile && sidebarOpen && (
+                                <div 
+                                    className="absolute inset-0 bg-black/30 z-0"
+                                    onClick={() => setSidebarOpen(false)}
+                                ></div>
+                            )}
+                            
                             <div className="p-4 border-b border-slate-100">
                                 <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Course Content</h2>
                             </div>
@@ -400,7 +428,7 @@
                                     <span className="text-teal-600 font-medium">{currentLesson.title}</span>
                                 </div>
 
-                                {/* Video Area */}
+                                {/* Video/Resource Area */}
                                 <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-xl mb-8 ring-1 ring-slate-200">
                                     {currentLesson.type === 'video' ? (
                                         <iframe 
@@ -410,27 +438,34 @@
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                             allowFullScreen
                                         ></iframe>
-                                    ) : (
+                                    ) : currentLesson.type === 'resource' && currentLesson.downloadUrl ? (
+                                        /* RESOURCE CONTENT BLOCK */
                                         <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-center p-6">
                                             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-4 text-teal-600 shadow-sm border border-slate-200">
-                                                <IconDownload />
+                                                <IconDownload width={32} height={32} />
                                             </div>
                                             <h3 className="text-xl font-bold mb-2 text-slate-800">Downloadable Content</h3>
                                             <p className="text-slate-500 mb-6 max-w-md">
                                                 {currentLesson.description}
                                             </p>
 
-<a
-    href="https://raw.githubusercontent.com/abirambika-HSAW/Insight-Shifts-User-Guide/main/Insight_Shifts_Guide.pdf" 
-    download="Insight_Shifts_Guide.pdf"
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold transition-transform transform hover:scale-[1.02] shadow-xl shadow-teal-500/50 flex items-center gap-2"
->
-    <Download size={18} /> Download File
-</a>
-
-                                            
+                                            {/* DYNAMIC STYLED ANCHOR TAG (Now simply says "Download") */}
+                                            <a
+                                                href={currentLesson.downloadUrl} 
+                                                download={currentLesson.fileName}
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-bold transition-transform transform hover:scale-[1.02] shadow-xl shadow-teal-500/50 flex items-center gap-2"
+                                            >
+                                                <IconDownload size={18} /> Download
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        /* FALLBACK CONTENT */
+                                        <div className="w-full h-full flex flex-col items-center justify-center bg-red-100 text-center p-6 text-red-700">
+                                            <IconAlertTriangle width={32} height={32} className="mb-4" />
+                                            <h3 className="text-xl font-bold mb-2">Content Not Available</h3>
+                                            <p className="text-sm">This lesson type is not supported or missing data.</p>
                                         </div>
                                     )}
                                 </div>
